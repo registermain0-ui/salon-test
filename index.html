@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#2c5fb3">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<title>サロン受付 M-V12.1</title>
+<style>
+  :root{
+    --resA-fill:#EEE8FA; --resA-border:#8854D0;
+    --resB-fill:#DEF7E5; --resB-border:#4CAF50;
+    --hold-fill:rgba(255,200,200,.85); --hold-border:#B40000;
+    --interval-fill:#FFFBE0; --interval-border:#C8C800;
+    --grid-line:#DCDCDC; --grid-hour:#9a9a9a;
+    --ink:#1a1a1a; --sub:#666; --accent:#2c5fb3;
+    --cellW:22px; --rowH:56px; --leftW:96px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;overflow:hidden}
+  body{font-family:"Hiragino Sans","Yu Gothic",system-ui,sans-serif;color:var(--ink);background:#fff;display:flex;flex-direction:column;padding-top:env(safe-area-inset-top)}
+
+  /* ===== 上部操作バー ===== */
+  .topbar{padding:8px 10px 6px;border-bottom:1px solid #ccc;background:#fafafa;flex:none}
+  .date-row{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:nowrap;overflow:hidden}
+  .date-btn{border:1px solid #bbb;background:#fff;border-radius:6px;padding:6px 6px;font-size:14px;font-weight:600;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .arrow{width:34px;height:34px;border:1px solid #bbb;background:#fff;border-radius:6px;font-size:16px;flex:none}
+  .mode{margin-left:auto;font-size:12px;color:var(--sub);flex:none}
+  .mode button{border:none;background:none;color:var(--accent);font-weight:700;font-size:13px;padding:6px 2px;white-space:nowrap;flex:none}
+  .mode button.holdmode{color:#B40000}
+  #modeLink{min-width:56px;text-align:center;border:1px solid #cdd8ea;border-radius:14px;padding:6px 8px}
+  #modeLink.holdmode{border-color:#e0b4b4;background:#fff5f5}
+  .btn-row{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+  .btn-row::-webkit-scrollbar{display:none}
+  .op{flex:none;border:1px solid #bbb;background:#fff;border-radius:6px;padding:8px 13px;font-size:13px;position:relative}
+  .op.primary{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+  .badge{position:absolute;top:-6px;right:-6px;background:#d32f2f;color:#fff;border-radius:9px;min-width:18px;height:18px;font-size:11px;line-height:18px;text-align:center;padding:0 4px;display:none}
+
+  /* ===== タイムテーブル ===== */
+  .tt{flex:1;overflow:auto;position:relative;overscroll-behavior:none;-webkit-overflow-scrolling:touch}
+  .tt-inner{position:relative}
+  .time-head{position:sticky;top:0;z-index:3;display:flex;height:26px;background:#fff;border-bottom:1px solid var(--grid-hour)}
+  .th-corner{position:sticky;left:0;z-index:4;width:var(--leftW);flex:none;background:#fff;border-right:1px solid var(--grid-hour)}
+  .hour{flex:none;width:calc(6*var(--cellW));font-size:11px;border-left:1px solid var(--grid-hour);padding:5px 0 0 3px}
+  .row{display:flex;height:var(--rowH);border-bottom:1px solid var(--grid-line);position:relative}
+  .th-name{position:sticky;left:0;z-index:2;width:var(--leftW);flex:none;background:#fff;border-right:1px solid var(--grid-hour);font-size:12px;display:flex;flex-direction:column;justify-content:center;padding-left:6px;line-height:1.25;overflow:hidden}
+  .th-name .nm{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .th-name small{font-weight:400;color:var(--sub);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .th-name small.cau{color:#c00000}
+  .cells{position:relative;flex:none;width:calc(144*var(--cellW))}
+  .vline{position:absolute;top:0;bottom:0;width:1px;background:var(--grid-line)}
+  .vline.h{background:var(--grid-hour)}
+  .off{position:absolute;top:0;bottom:0;background:#f0f0f0}
+  .res{position:absolute;top:3px;bottom:3px;border-radius:4px;font-size:10px;line-height:1.35;padding:3px 4px;overflow:hidden;white-space:nowrap;z-index:1;display:flex;flex-direction:column;justify-content:center}
+  .res.A{background:var(--resA-fill);border:1.5px solid var(--resA-border)}
+  .res.B{background:var(--resB-fill);border:1.5px solid var(--resB-border)}
+  .res b{font-size:11px}
+  .res .bd{font-weight:700}
+  .res .bd.red{color:#c80000}
+  .itv{position:absolute;top:3px;bottom:3px;background:var(--interval-fill);border:1px dashed var(--interval-border);border-radius:3px}
+  .cells .hold{position:absolute;top:6px;bottom:6px;background:var(--hold-fill);border:2px solid var(--hold-border);border-radius:3px;z-index:1}
+  .nowline{position:absolute;top:0;bottom:0;width:2px;background:#e53935;z-index:2;pointer-events:none}
+  .nowline::before{content:"";position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#e53935}
+  .empty{padding:40px 20px;text-align:center;color:var(--sub);font-size:14px;line-height:1.8}
+
+  /* ===== ボトムシート共通 ===== */
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:10}
+  .sheet-bg.open{display:block}
+  .sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:14px 14px 0 0;box-shadow:0 -4px 20px rgba(0,0,0,.25);max-height:82%;display:none;flex-direction:column;z-index:11;padding-bottom:env(safe-area-inset-bottom)}
+  .sheet.open{display:flex}
+  .grip{width:36px;height:4px;background:#ccc;border-radius:2px;margin:8px auto 4px;flex:none}
+  .sheet h2{font-size:15px;padding:4px 14px 8px;border-bottom:1px solid #eee;flex:none;display:flex;align-items:center}
+  .sheet-close{margin-left:auto;border:none;background:none;font-size:20px;color:#999;padding:0 4px}
+
+  /* 最短取得 */
+  .base-row{display:flex;gap:8px;align-items:center;padding:10px 14px;font-size:13px;flex:none}
+  .base-row input{width:70px;border:1px solid #bbb;border-radius:6px;padding:8px;font-size:16px;text-align:center}
+  .base-row button{border:1px solid #bbb;background:#fff;border-radius:6px;padding:9px 12px;font-size:13px}
+  .slot-course{border:1px solid #bbb;border-radius:6px;padding:8px 6px;font-size:15px;background:#fff}
+  #slotRun{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:700}
+  #slotLast{background:#5a3d8a;color:#fff;border-color:#5a3d8a;font-weight:700}
+  #slotResult{padding-bottom:14px}
+  .cand{overflow-y:auto;flex:1;min-height:120px}
+  .cand table{width:100%;border-collapse:collapse;font-size:13px}
+  .cand th{background:#f5f5f5;padding:8px 4px;font-weight:600;border-bottom:1px solid #ddd;position:sticky;top:0}
+  .cand td{padding:12px 4px;text-align:center;border-bottom:1px solid #eee}
+  .cand tr.ok:active{background:#eef4ff}
+  .cand tr.ng td{color:#aaa}
+  .sns{border-top:1px solid #ddd;padding:8px 14px 12px;flex:none}
+  .sns textarea{width:100%;height:76px;border:1px solid #ccc;border-radius:6px;font-size:12px;padding:6px;resize:none;color:#444}
+  .sns .r{display:flex;gap:8px;justify-content:flex-end;margin-top:6px}
+  .sns button{border:1px solid #bbb;background:#fff;border-radius:6px;padding:8px 14px;font-size:13px}
+
+  /* 出勤登録 */
+  .att-body{overflow-y:auto;flex:1;padding:8px 14px}
+  .att-head{display:flex;gap:6px;font-size:12px;color:var(--sub);padding:4px 0}
+  .att-head span:first-child{flex:1}
+  .att-head span{width:76px;text-align:center}
+  .att-row{display:flex;gap:6px;margin-bottom:6px}
+  .att-row select{flex:1;border:1px solid #bbb;border-radius:6px;padding:9px 6px;font-size:14px;background:#fff;min-width:0}
+  .att-row input.tm{width:76px;border:1px solid #bbb;border-radius:6px;padding:9px 4px;font-size:14px;text-align:center;flex:none}
+  .att-row input.err{border-color:#d32f2f}
+  .sheet-foot{flex:none;display:flex;gap:10px;padding:10px 14px;border-top:1px solid #ddd}
+  .sheet-foot .sub{border:1px solid #bbb;background:#fff;border-radius:8px;padding:11px 14px;font-size:14px}
+  .sheet-foot .main{flex:1;border:none;background:var(--accent);color:#fff;border-radius:8px;padding:11px;font-size:15px;font-weight:700}
+
+  /* 引継登録 */
+  .ho-body{overflow-y:auto;flex:1;padding:8px 10px}
+  .ho-head{display:flex;gap:4px;font-size:11px;color:var(--sub);padding:2px 0 4px}
+  .ho-head .c-th{width:96px;flex:none}.ho-head .c-tm{width:62px;flex:none}.ho-head .c-cs{width:58px;flex:none}
+  .ho-head .c-nm{flex:1}.ho-head .c-p4{width:56px;flex:none}
+  .ho-row{display:flex;gap:4px;margin-bottom:6px}
+  .ho-row select,.ho-row input{border:1px solid #bbb;border-radius:6px;padding:9px 4px;font-size:13px;background:#fff;min-width:0}
+  .ho-row .c-th{width:96px;flex:none}.ho-row .c-tm{width:62px;flex:none;text-align:center}
+  .ho-row .c-cs{width:58px;flex:none}.ho-row .c-nm{flex:1}.ho-row .c-p4{width:56px;flex:none;text-align:center}
+  .ho-add{display:block;width:100%;border:1px dashed #999;background:#fff;color:var(--sub);border-radius:8px;padding:10px;font-size:13px;margin-top:2px}
+
+  /* 送信待機 */
+  .sq-body{overflow-y:auto;flex:1;min-height:160px;padding:6px 10px 14px}
+  .sq-item{border:1px solid #ddd;border-radius:8px;padding:10px 12px;margin-bottom:8px}
+  .sq-line1{display:flex;align-items:center;gap:8px;font-size:14px}
+  .sq-line1 b{font-size:15px}
+  .sq-line1 .dt{color:var(--sub);font-size:12px}
+  .sq-open{margin-left:auto;border:1px solid var(--accent);color:var(--accent);background:#fff;border-radius:6px;padding:6px 12px;font-size:13px;flex:none}
+  .sq-line2{display:flex;gap:18px;margin-top:8px}
+  .sq-line2 label{display:flex;align-items:center;gap:6px;font-size:14px}
+  .sq-line2 input{width:22px;height:22px}
+  .sq-empty{text-align:center;color:var(--sub);font-size:14px;padding:36px 0}
+
+  /* 注意点編集 */
+  .cau-body{padding:8px 14px}
+  .cau-body textarea{width:100%;height:110px;border:1px solid #bbb;border-radius:8px;padding:10px;font-size:15px;resize:none}
+
+  /* メニュー */
+  .menu-body{padding:10px 14px 16px}
+  .menu-body button{display:block;width:100%;border:1px solid #bbb;background:#fff;border-radius:8px;padding:13px;font-size:15px;margin-bottom:10px;text-align:left}
+  .menu-note{font-size:12px;color:var(--sub);line-height:1.6;padding:4px 2px}
+
+  /* ===== 予約入力(全画面) ===== */
+  .form-page{position:fixed;inset:0;background:#fff;z-index:20;display:none;flex-direction:column;padding-top:env(safe-area-inset-top)}
+  .form-page.open{display:flex}
+  .form-head{flex:none;display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid #ccc;background:#fafafa}
+  .form-head .back{border:none;background:none;font-size:15px;color:var(--accent);padding:4px 8px 4px 0}
+  .form-head h2{font-size:16px}
+  .form-body{flex:1;overflow-y:auto;padding:12px 14px 20px}
+  .caution{background:#fff2f2;border:1px solid #e8b0b0;color:#c00000;font-size:13px;font-weight:700;border-radius:6px;padding:8px 10px;margin-bottom:12px;white-space:pre-wrap;display:none}
+  .fg{margin-bottom:12px;min-width:0}
+  .fg label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+  .fg input,.fg select{width:100%;border:1px solid #bbb;border-radius:8px;padding:11px 10px;font-size:16px;background:#fff}
+  .fg input[readonly]{background:#f5f5f5}
+  .fg-row{display:flex;gap:10px}
+  .fg-row .fg{flex:1}
+  .seg{display:flex;border:1px solid #bbb;border-radius:8px;overflow:hidden}
+  .seg button{flex:1;border:none;background:#fff;padding:12px 0;font-size:14px}
+  .seg button.on{background:var(--accent);color:#fff;font-weight:700}
+  .total{font-size:22px;font-weight:800;text-align:right;padding:6px 2px;border-bottom:2px solid var(--ink)}
+  .chk{display:flex;align-items:center;gap:8px;font-size:14px;padding:8px 0}
+  .chk input{width:22px;height:22px}
+  .form-foot{flex:none;display:flex;gap:10px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #ccc;background:#fafafa}
+  .form-foot .del{flex:none;border:1px solid #d32f2f;color:#d32f2f;background:#fff;border-radius:8px;padding:12px 16px;font-size:14px}
+  .form-foot .save{flex:1;border:none;background:var(--accent);color:#fff;border-radius:8px;padding:12px;font-size:16px;font-weight:700}
+
+  /* レポート */
+  .rep-date{display:flex;gap:8px;align-items:center}
+  .rep-types{display:flex;gap:20px;align-items:center;margin-bottom:12px;font-size:15px}
+  .rep-types label{display:flex;align-items:center;gap:6px}
+  .rep-types input{width:22px;height:22px}
+  .rep-count{margin-left:auto;color:var(--sub);font-size:14px}
+  .rep-build{display:block;width:100%;border:none;background:var(--accent);color:#fff;border-radius:8px;padding:13px;font-size:16px;font-weight:700;margin-bottom:8px}
+  .rep-status{font-size:12px;color:var(--sub);margin-bottom:8px}
+  .rep-out{width:100%;height:52vh;border:1px solid #bbb;border-radius:8px;padding:10px;font-size:13px;line-height:1.6;resize:none;font-family:ui-monospace,monospace}
+
+  /* セラピスト管理 */
+  .tm-list{max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:8px}
+  .tm-item{padding:10px 12px;border-bottom:1px solid #eee;font-size:14px}
+  .tm-item:last-child{border-bottom:none}
+  .tm-item.sel{background:#eef4ff}
+  .tm-item small{display:block;color:var(--sub);font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tm-empty{padding:18px;text-align:center;color:var(--sub);font-size:13px}
+  .tm-hr{border:none;border-top:1px solid #ddd;margin:14px 0}
+  .tm-ta{width:100%;height:64px;border:1px solid #bbb;border-radius:8px;padding:10px;font-size:15px;resize:none}
+  .tm-btns{display:flex;gap:8px;margin-top:4px;padding-bottom:24px}
+  .tm-main{flex:1;border:none;background:var(--accent);color:#fff;border-radius:8px;padding:12px;font-size:15px;font-weight:700}
+  .tm-sub{flex:1;border:1px solid #bbb;background:#fff;border-radius:8px;padding:12px;font-size:14px}
+  .tm-danger{flex:1;border:1px solid #d32f2f;color:#d32f2f;background:#fff;border-radius:8px;padding:12px;font-size:14px}
+  .tm-sub:disabled,.tm-danger:disabled{opacity:.4}
+
+  /* エリア */
+  .area-row{display:flex;align-items:center;gap:10px;padding:0 14px 8px;font-size:13px;flex:none}
+  .area-seg{display:flex;border:1px solid #bbb;border-radius:8px;overflow:hidden}
+  .area-seg button{border:none;background:#fff;padding:9px 18px;font-size:14px;border-left:1px solid #ddd}
+  .area-seg button:first-child{border-left:none}
+  .area-seg button.on{background:var(--accent);color:#fff;font-weight:700}
+  .area-tag{display:inline-block;margin-right:4px;background:#eef;border:1px solid #99c;color:#336;border-radius:4px;font-size:9px;padding:0 4px;vertical-align:middle}
+  .att-row select.ar{width:52px;flex:none;border:1px solid #bbb;border-radius:6px;padding:9px 2px;font-size:14px;background:#fff;text-align:center}
+  .att-head .ah-ar{width:52px}
+
+  /* 更新バナー */
+  .upd-banner{position:fixed;left:10px;right:10px;bottom:14px;background:#1e3a5f;color:#fff;border-radius:10px;padding:12px 14px;display:none;align-items:center;gap:10px;font-size:14px;z-index:60;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+  .upd-banner button{margin-left:auto;border:none;background:#fff;color:#1e3a5f;font-weight:700;border-radius:8px;padding:9px 20px;font-size:14px}
+
+  /* 設定 */
+  .set-h{font-size:14px;margin:16px 0 8px;padding-bottom:4px;border-bottom:2px solid var(--accent)}
+  .set-ta{width:100%;height:88px;border:1px solid #bbb;border-radius:8px;padding:10px;font-size:15px;resize:none}
+  .set-ta-s{height:64px}
+  .set-row{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+  .set-row .s-name{flex:1;border:1px solid #bbb;border-radius:6px;padding:10px;font-size:15px;min-width:0}
+  .set-row .s-price{width:88px;flex:none;border:1px solid #bbb;border-radius:6px;padding:10px 6px;font-size:15px;text-align:right}
+  .set-row .s-fee{display:flex;align-items:center;gap:4px;font-size:13px;flex:none}
+  .set-row .s-fee input{width:20px;height:20px}
+  .set-row .s-del{flex:none;width:34px;height:38px;border:1px solid #ccc;background:#fff;border-radius:6px;color:#c00;font-size:16px}
+  /* ★M-V12: 送信フォーマット */
+  .copy-msg{width:100%;margin-top:10px;padding:12px;border:1px solid #2b6cb0;background:#fff;color:#2b6cb0;border-radius:8px;font-size:15px;font-weight:600}
+  .copy-msg:active{background:#ebf4ff}
+  .set-row .s-sm{width:70px;flex:none;border:1px solid #bbb;border-radius:6px;padding:10px 6px;font-size:15px}
+  .set-ta-fmt{width:100%;min-height:170px;border:1px solid #bbb;border-radius:6px;padding:10px;font-size:14px;line-height:1.5;box-sizing:border-box;white-space:pre}
+
+  /* 担当チップ・送信待機アラート */
+  .mode{display:flex;align-items:center;gap:6px}
+  .staff-chip{border:1px solid #bbb;background:#fff;border-radius:14px;padding:6px 8px;font-size:12px;color:var(--ink);max-width:104px;min-width:0;flex:0 1 auto !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .op.alert{background:#d32f2f;color:#fff;border-color:#d32f2f;font-weight:700}
+  #staffList button.cur{border-color:var(--accent);color:var(--accent);font-weight:700}
+
+  /* クラウド同期 */
+  .cloud-btn{border-color:#3a6ea5 !important;color:#1e3a5f;background:#f2f7ff !important;font-weight:700}
+  .sync-body{padding:8px 14px}
+
+  /* 出勤登録: 検索追加方式 */
+  .att-search-wrap{position:relative;padding:0 14px 8px;flex:none}
+  #attSearch{width:100%;border:1px solid #bbb;border-radius:8px;padding:11px 12px;font-size:15px}
+  .att-sug{position:absolute;left:14px;right:14px;top:100%;margin-top:-6px;background:#fff;border:1px solid #bbb;border-radius:8px;box-shadow:0 6px 16px rgba(0,0,0,.18);z-index:30;display:none;max-height:240px;overflow-y:auto}
+  .att-sug.show{display:block}
+  .att-sug button{display:block;width:100%;text-align:left;border:none;background:none;padding:12px 14px;font-size:15px;border-bottom:1px solid #eee}
+  .att-sug button:last-child{border-bottom:none}
+  .att-sug button.new{color:var(--accent);font-weight:700}
+  .att-row .nm-label{flex:1;min-width:0;font-size:14px;padding:9px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .att-head .ah-nm{flex:1}
+  .att-head .ah-x{width:34px;flex:none}
+  .att-row .x-del{width:34px;height:38px;flex:none;border:1px solid #ccc;background:#fff;border-radius:6px;color:#c00;font-size:15px}
+  .att-empty{padding:22px;text-align:center;color:var(--sub);font-size:13px;display:none}
+  .att-empty.show{display:block}
+
+  /* トースト */
+  #toast{position:fixed;left:50%;bottom:80px;transform:translateX(-50%) translateY(20px);background:rgba(30,30,30,.9);color:#fff;font-size:13px;padding:10px 18px;border-radius:20px;opacity:0;pointer-events:none;transition:.25s;z-index:50}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<!-- 上部操作バー -->
+<div class="topbar">
+  <div class="date-row">
+    <button class="arrow" id="prevDay">‹</button>
+    <button class="date-btn" id="dateLabel">----/--/--</button>
+    <input type="date" id="datePick" style="position:absolute;opacity:0;width:1px;height:1px;pointer-events:none">
+    <button class="arrow" id="nextDay">›</button>
+    <span class="mode">
+      <button id="modeLink">受付</button>
+      <button id="staffLink" class="staff-chip">担当: -</button>
+    </span>
+  </div>
+  <div class="btn-row">
+    <button class="op" id="btnNow">現時刻</button>
+    <button class="op primary" id="btnShortest">最短取得</button>
+    <button class="op" id="btnSlotSearch">空枠検索</button>
+    <button class="op" id="btnSendQueue">送信待機<span class="badge" id="sendBadge">0</span></button>
+    <button class="op" id="btnMenu">データ</button>
+  </div>
+</div>
+
+<!-- タイムテーブル -->
+<div class="tt" id="tt">
+  <div class="tt-inner" id="ttInner">
+    <div class="time-head" id="thead">
+      <div class="th-corner"></div>
+    </div>
+    <div id="rows"></div>
+  </div>
+</div>
+
+<!-- シート背景 -->
+<div class="sheet-bg" id="sheetBg"></div>
+
+<!-- 最短取得シート -->
+<div class="sheet" id="shortSheet">
+  <div class="grip"></div>
+  <h2>最短取得<button class="sheet-close">×</button></h2>
+  <div class="base-row">
+    基準時刻 <input id="baseTime" inputmode="numeric">
+    <button id="baseNow">現在時刻</button>
+    <button id="baseRecalc">再計算</button>
+  </div>
+  <div class="area-row">エリア:
+    <div class="area-seg" id="shortArea">
+      <button data-v="全" class="on">全</button><button data-v="A">A</button><button data-v="B">B</button>
+    </div>
+  </div>
+  <div class="cand">
+    <table>
+      <thead><tr><th>セラピスト</th><th>最短開始</th><th>最大コース</th></tr></thead>
+      <tbody id="candBody"></tbody>
+    </table>
+  </div>
+  <div class="sns">
+    <textarea id="snsText" readonly></textarea>
+    <div class="r"><button id="snsFormat">フォーマット</button><button id="snsCopy">コピー</button></div>
+  </div>
+</div>
+
+<!-- 空枠検索シート -->
+<div class="sheet" id="slotSheet">
+  <div class="grip"></div>
+  <h2>空枠検索<button class="sheet-close">×</button></h2>
+  <div class="base-row">
+    時刻 <input id="slotTime" inputmode="numeric" placeholder="空白=今">
+    コース <select id="slotCourse" class="slot-course">
+      <option>60</option><option>80</option><option>100</option><option>120</option>
+      <option>140</option><option>160</option><option>180</option>
+    </select>
+    <button id="slotRun">検索</button>
+    <button id="slotLast">ﾗｽﾄ枠</button>
+  </div>
+  <div class="area-row">エリア:
+    <div class="area-seg" id="slotArea"></div>
+  </div>
+  <div class="cand" id="slotResult"></div>
+</div>
+
+<!-- 出勤登録シート -->
+<div class="sheet" id="attSheet">
+  <div class="grip"></div>
+  <h2>出勤登録<button class="sheet-close">×</button></h2>
+  <div class="att-search-wrap">
+    <input id="attSearch" placeholder="セラピスト名で検索して追加" autocomplete="off">
+    <div class="att-sug" id="attSug"></div>
+  </div>
+  <div class="att-body">
+    <div class="att-head"><span class="ah-nm">セラピスト</span><span>出勤</span><span>終了</span><span class="ah-ar">ｴﾘｱ</span><span class="ah-x"></span></div>
+    <div id="attRows"></div>
+    <div class="att-empty" id="attEmpty">上の検索からセラピストを追加してください。</div>
+  </div>
+  <div class="sheet-foot">
+    <button class="main" id="attSave">保存</button>
+  </div>
+</div>
+
+<!-- メニュー(データ移行)シート -->
+<div class="sheet" id="menuSheet">
+  <div class="grip"></div>
+  <h2>メニュー<button class="sheet-close">×</button></h2>
+  <div class="menu-body">
+    <button id="btnAttendance">出勤</button>
+    <button id="btnHandover">引継</button>
+    <button id="openReport">レポート</button>
+    <button id="openSettings">設定</button>
+    <button id="openTherapistMgmt">セラピスト管理</button>
+    <button id="cloudPush" class="cloud-btn">☁ 預ける(クラウドへ保存)</button>
+    <button id="cloudPull" class="cloud-btn">☁ 受け取る(クラウドから取得)</button>
+    <button id="openSyncConfig">クラウド同期設定</button>
+    <button id="expData">エクスポート(バックアップ保存)</button>
+    <button id="impData">インポート(バックアップ読込)</button>
+    <input type="file" id="impFile" accept=".md,.json,text/markdown,application/json" style="display:none">
+    <p class="menu-note">バージョン: <b id="verLabel">-</b></p>
+    <p class="menu-note">データはこの端末内に保存されます。機種変更やPCとの連携にはエクスポートしたファイルを使用してください。(PCとの連携機能はPC版のアップデートで対応予定)</p>
+  </div>
+</div>
+
+<!-- 引継登録シート -->
+<div class="sheet" id="hoSheet">
+  <div class="grip"></div>
+  <h2>引継登録（Type:A 一括）<button class="sheet-close">×</button></h2>
+  <div class="ho-body" id="hoBody">
+    <div class="ho-head"><span class="c-th">セラピスト</span><span class="c-tm">開始</span><span class="c-cs">コース</span><span class="c-nm">顧客名</span><span class="c-p4">下4桁</span></div>
+    <div id="hoRows"></div>
+    <button class="ho-add" id="hoAddRow">+ 行を追加</button>
+  </div>
+  <div class="sheet-foot">
+    <button class="main" id="hoSave">登録（Type:A）</button>
+  </div>
+</div>
+
+<!-- 送信待機シート -->
+<div class="sheet" id="sqSheet">
+  <div class="grip"></div>
+  <h2>送信待機（手動送信チェック）<button class="sheet-close">×</button></h2>
+  <div class="sq-body" id="sqBody"></div>
+</div>
+
+<!-- 担当内勤選択シート -->
+<div class="sheet" id="staffSheet">
+  <div class="grip"></div>
+  <h2>担当内勤の切替<button class="sheet-close">×</button></h2>
+  <div class="menu-body" id="staffList"></div>
+</div>
+
+<!-- クラウド同期設定シート -->
+<div class="sheet" id="syncSheet">
+  <div class="grip"></div>
+  <h2>クラウド同期設定<button class="sheet-close">×</button></h2>
+  <div class="sync-body">
+    <p class="menu-note">GitHubの<b>非公開リポジトリ</b>をデータ保管先として使います。初回設定の手順は同梱の「README_導入手順.md」の「クラウド同期」の章をご覧ください(5分程度)。</p>
+    <div class="fg"><label>リポジトリ(ユーザー名/リポジトリ名)</label><input id="syRepo" placeholder="例: registermain0-ui/salon-data" autocapitalize="off" autocorrect="off"></div>
+    <div class="fg"><label>アクセストークン</label><input id="syToken" type="password" placeholder="github_pat_..." autocapitalize="off" autocorrect="off"></div>
+    <p class="menu-note" id="syInfo">まだ同期していません</p>
+  </div>
+  <div class="sheet-foot">
+    <button class="sub" id="syTest">接続テスト</button>
+    <button class="main" id="sySave">保存</button>
+  </div>
+</div>
+
+<!-- 注意点編集シート -->
+<div class="sheet" id="cauSheet">
+  <div class="grip"></div>
+  <h2 id="cauTitle">注意点編集<button class="sheet-close">×</button></h2>
+  <div class="cau-body">
+    <p class="menu-note">当日の受付注意点。予約画面に赤文字で表示されます。</p>
+    <textarea id="cauText"></textarea>
+  </div>
+  <div class="sheet-foot">
+    <button class="main" id="cauSave">保存</button>
+  </div>
+</div>
+
+<!-- 予約入力(全画面) -->
+<div class="form-page" id="formPage">
+  <div class="form-head">
+    <button class="back" id="fBack">‹ 戻る</button>
+    <h2 id="formTitle">予約追加</h2>
+  </div>
+  <div class="form-body">
+    <div class="caution" id="fCaution"></div>
+    <div class="fg"><label>指名セラピスト</label><select id="fTherapist"></select></div>
+    <div class="fg-row">
+      <div class="fg"><label>開始時間</label><input id="fStart" inputmode="numeric" placeholder="例 2130 / 26:30"></div>
+      <div class="fg"><label>コース(分)</label><select id="fCourse"></select></div>
+      <div class="fg"><label>延長(分)</label><select id="fExt"></select></div>
+    </div>
+    <div class="fg"><label>終了時間(自動計算)</label><input id="fEnd" readonly></div>
+    <div class="fg-row">
+      <div class="fg"><label>顧客名</label><input id="fCustomer" placeholder="例: 田中様"></div>
+      <div class="fg" style="max-width:110px"><label>下四桁</label><input id="fPhone" inputmode="numeric" maxlength="4"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>顧客属性</label><select id="fAttr"><option value=""></option><option>N</option><option>R</option></select></div>
+      <div class="fg"><label>指名</label><select id="fNom"><option value=""></option><option>F</option><option>写</option><option>本</option><option>姫</option></select></div>
+    </div>
+    <div class="fg"><label>支払い</label>
+      <div class="seg"><button id="payCash" class="on">現金</button><button id="payPaypay">PAYPAY</button></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>割引額</label><select id="fDiscount"></select></div>
+      <div class="fg"><label>OP</label><select id="fOp"><option value=""></option><option>有</option><option>無</option></select></div>
+    </div>
+    <div class="fg"><label>総額(自動計算)</label><div class="total" id="fTotal">—</div></div>
+    <div class="fg"><label>メモ</label><input id="fMemo"></div>
+    <div class="chk"><input type="checkbox" id="fSendC"><label for="fSendC" style="margin:0;font-size:14px;color:var(--ink)">顧客送信 済</label></div>
+    <div class="chk"><input type="checkbox" id="fSendT"><label for="fSendT" style="margin:0;font-size:14px;color:var(--ink)">女性送信 済</label></div>
+    <!-- ★M-V12: セラピスト送信文をテンプレートから生成してコピー -->
+    <button class="copy-msg" id="fCopyTherapist" type="button">セラピスト送信文コピー</button>
+  </div>
+  <div class="form-foot">
+    <button class="del" id="fDelete">削除</button>
+    <button class="save" id="fSave">登録</button>
+  </div>
+</div>
+
+<!-- 設定(全画面) -->
+<div class="form-page" id="setPage">
+  <div class="form-head">
+    <button class="back" id="setBack">‹ 戻る</button>
+    <h2>設定</h2>
+  </div>
+  <div class="form-body">
+    <h3 class="set-h">料金設計</h3>
+    <div class="fg-row">
+      <div class="fg"><label>60分</label><input id="sp60" inputmode="numeric"></div>
+      <div class="fg"><label>80分</label><input id="sp80" inputmode="numeric"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>100分</label><input id="sp100" inputmode="numeric"></div>
+      <div class="fg"><label>120分</label><input id="sp120" inputmode="numeric"></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>延長単位(分)</label><input id="spExtMin" inputmode="numeric"></div>
+      <div class="fg"><label>延長単価(円)</label><input id="spExtPrice" inputmode="numeric"></div>
+    </div>
+
+    <h3 class="set-h">指名種別</h3>
+    <p class="menu-note">「指名料」にチェックした種別を選ぶと、セラピスト別の指名料が加算されます。</p>
+    <div id="sNomRows"></div>
+    <button class="ho-add" id="sNomAdd">+ 種別を追加</button>
+
+    <h3 class="set-h">顧客属性(1行に1つ)</h3>
+    <textarea id="sAttrs" class="set-ta"></textarea>
+
+    <h3 class="set-h">割引額(1行に1つ)</h3>
+    <textarea id="sDiscounts" class="set-ta"></textarea>
+
+    <h3 class="set-h">オプション</h3>
+    <div id="sOpRows"></div>
+    <button class="ho-add" id="sOpAdd">+ オプションを追加</button>
+
+    <h3 class="set-h">担当内勤(1行に1つ)</h3>
+    <textarea id="sStaffs" class="set-ta set-ta-s"></textarea>
+
+    <h3 class="set-h">エリア(1行に1つ)</h3>
+    <textarea id="sAreas" class="set-ta set-ta-s"></textarea>
+
+    <h3 class="set-h">最短計算式</h3>
+    <div class="fg-row">
+      <div class="fg"><label>準備時間(分)</label><input id="scPrep" inputmode="numeric"></div>
+      <div class="fg"><label>既定ｲﾝﾀｰﾊﾞﾙ(分)</label><input id="scIv" inputmode="numeric"></div>
+      <div class="fg"><label>基準の丸め(分)</label><input id="scRound" inputmode="numeric"></div>
+    </div>
+    <p class="menu-note">準備時間=「今から◯分後」以降を最短候補にする猶予。既定インターバルはセラピスト個別設定が空の時に使用。</p>
+
+    <!-- ★M-V12: 送信フォーマット(セラピスト向け・PC版と共通設定) -->
+    <h3 class="set-h">送信フォーマット(セラピスト向け)</h3>
+    <p class="menu-note">予約画面の「セラピスト送信文コピー」で使うテンプレートです。使える変数: {開始} {終了} {分}=コース+延長の合計 {コース} {延長} {属性}=下の属性表示変換で決定 {顧客名} {下四桁} {金額}=(コース+延長+指名料)−割引 {割引} {指名文言} {指名} {セラピスト} {OP} {メモ}。行内の変数がすべて空ならその行は丸ごと省略されます。</p>
+    <textarea id="sSendTemplate" class="set-ta-fmt" spellcheck="false"></textarea>
+    <button class="ho-add" id="sSendTplReset" type="button">テンプレートを初期値に戻す</button>
+
+    <h3 class="set-h">属性表示変換(上の行から順に判定・空欄は全てに一致)</h3>
+    <div id="sAttrRuleRows"></div>
+    <button class="ho-add" id="sAttrRuleAdd" type="button">+ ルールを追加</button>
+
+    <h3 class="set-h">指名文言(指名種別ごとの追加文言)</h3>
+    <div id="sNomPhraseRows"></div>
+    <button class="ho-add" id="sNomPhraseAdd" type="button">+ 文言を追加</button>
+    <div style="height:8px"></div>
+  </div>
+  <div class="form-foot">
+    <button class="save" id="setSave">保存</button>
+  </div>
+</div>
+
+<!-- レポート(全画面) -->
+<div class="form-page" id="repPage">
+  <div class="form-head">
+    <button class="back" id="repBack">‹ 戻る</button>
+    <h2>レポート</h2>
+  </div>
+  <div class="form-body">
+    <div class="fg"><label>日付</label>
+      <div class="rep-date">
+        <button class="arrow" id="repPrev">‹</button>
+        <button class="date-btn" id="repDateLabel">----/--/--</button>
+        <button class="arrow" id="repNext">›</button>
+      </div>
+    </div>
+    <div class="rep-types">
+      <label><input type="checkbox" id="repA" checked>Type A</label>
+      <label><input type="checkbox" id="repB" checked>Type B</label>
+      <span class="rep-count" id="repCount">0件</span>
+    </div>
+    <div class="fg"><label>担当内勤</label><select id="repStaff"></select></div>
+    <button class="rep-build" id="repBuild">生成してコピー</button>
+    <div class="rep-status" id="repStatus">日付とTypeを選択して「生成してコピー」を押してください。</div>
+    <textarea class="rep-out" id="repOut" readonly></textarea>
+  </div>
+</div>
+
+<!-- セラピスト管理(全画面) -->
+<div class="form-page" id="tmPage">
+  <div class="form-head">
+    <button class="back" id="tmBack">‹ 戻る</button>
+    <h2>セラピスト管理</h2>
+  </div>
+  <div class="form-body">
+    <div class="fg"><input id="tmFilter" placeholder="名前で検索"></div>
+    <div class="tm-list" id="tmList"></div>
+    <hr class="tm-hr">
+    <div class="fg"><label>セラピスト名 (必須)</label><input id="tmName"></div>
+    <div class="fg-row">
+      <div class="fg"><label>顔</label><select id="tmFace"></select></div>
+      <div class="fg"><label>体</label><select id="tmBody"></select></div>
+      <div class="fg"><label>寛</label><select id="tmKan"></select></div>
+    </div>
+    <div class="fg-row">
+      <div class="fg"><label>指名料</label><select id="tmFee"><option>1000円</option><option>2000円</option></select></div>
+      <div class="fg"><label>コース上限</label><select id="tmMax"><option>60分</option><option>80分</option><option>100分</option><option selected>120分</option></select></div>
+      <div class="fg"><label>インターバル(分)</label><input id="tmInterval" inputmode="numeric" placeholder="20"></div>
+    </div>
+    <div class="fg"><label>注意点(予約画面に赤文字表示)</label><textarea id="tmCaution" class="tm-ta"></textarea></div>
+    <div class="fg"><label>メモ(自動生成)</label><input id="tmMemo" readonly></div>
+    <div class="tm-btns">
+      <button id="tmAdd" class="tm-main">追加</button>
+      <button id="tmUpdate" class="tm-sub" disabled>更新</button>
+      <button id="tmDelete" class="tm-danger" disabled>削除</button>
+      <button id="tmClear" class="tm-sub">クリア</button>
+    </div>
+  </div>
+</div>
+
+<div class="upd-banner" id="updBanner">
+  <span>新しいバージョンがあります</span>
+  <button id="updBtn">更新</button>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// 時刻ヘッダー(7:00〜30:00)を生成
+(function(){
+  const thead = document.getElementById("thead");
+  for (let h = 7; h <= 30; h++) {
+    const d = document.createElement("div");
+    d.className = "hour";
+    d.textContent = h + ":00";
+    thead.appendChild(d);
+  }
+})();
+</script>
+<script src="./app.js"></script>
+</body>
+</html>
