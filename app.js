@@ -14,7 +14,7 @@ const COLUMNS       = (24 * 60) / MINUTE_STEP; // 144
 const COURSES       = [60, 80, 100, 120];
 const SEARCH_COURSES = [60, 80, 100, 120, 140, 160, 180]; // 空枠検索用
 
-const APP_VERSION = "M-V12.1";
+const APP_VERSION = "M-V12.5";
 
 /* ================= 純粋ロジック(移植) ================= */
 
@@ -48,10 +48,10 @@ function fmtBiz(min) {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }
 
-// SNS用: 通常24h表記
+// SNS用: 通常24h表記(0〜9時は0埋めしない。M-V12.5: 「8:20」「0:15」のように直接時間で表示)
 function fmtNormal(min) {
   const h = Math.floor(min / 60) % 24, m = min % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  return `${h}:${String(m).padStart(2, "0")}`;
 }
 
 // 営業日判定: 現在時刻→営業日("YYYY-MM-DD")
@@ -345,7 +345,7 @@ function calcTotal(prices, course, ext, discount, opPrice, applyNomFee, nominati
    ・{金額} = (コース料金+延長料金+指名料) − 割引 (0未満は0・OPは含めない)
    ・行内の既知変数がすべて空(数値0含む)ならその行を丸ごと省略
    ・空値の変数は直後の空白(半角/全角)1文字も除去 / 連続空行は1行に / 先頭末尾の空行は除去 */
-function fmtMsgTime(min) { // ★M-V12.1: 出力統一のため24時以降は巻き戻す表記(最短取得コピーと同じfmtNormal仕様)
+function fmtMsgTime(min) { // ★M-V12.5: 出力統一のため24時以降は巻き戻す表記(最短取得コピーと同じfmtNormal仕様)
   if (min == null || min < 0) return "";
   return fmtNormal(min);
 }
@@ -476,7 +476,7 @@ function holdCellsToRanges(cols) {
 
 /* レポート1行(PC: ReportBuilder.FormatLine 移植) */
 function reportFormatLine(r) {
-  const start = fmtNormal(r.start); // ★M-V12.1: 出力統一のため24時以降は巻き戻す表記
+  const start = fmtNormal(r.start); // ★M-V12.5: 出力統一のため24時以降は巻き戻す表記
   let dur = `${r.courseMinutes}分`;
   if ((r.extensionMinutes || 0) > 0) dur += `+${r.extensionMinutes}分`;
   const cust = (r.customer || "").trim();
@@ -989,18 +989,20 @@ document.getElementById("btnAttendance").addEventListener("click", () => { close
  * 上部の検索(部分一致+あいまい一致)から候補をタップして行を追加する。
  * 追加済みの行: 名前(固定) / 出勤 / 終了 / エリア / 削除 */
 function attAddedIds() {
-  return new Set([...document.querySelectorAll("#attRows .att-row")]
-    .map(tr => Number(tr.dataset.tid)));
+  return new Set([...document.querySelectorAll("#attRows .att-entry")]
+    .map(el => Number(el.dataset.tid)));
 }
 function attRefreshEmpty() {
   const empty = document.getElementById("attEmpty");
-  empty.classList.toggle("show", document.querySelectorAll("#attRows .att-row").length === 0);
+  empty.classList.toggle("show", document.querySelectorAll("#attRows .att-entry").length === 0);
 }
 function attAddRow(t, cur, focusStart) {
   const body = document.getElementById("attRows");
+  const wrap = document.createElement("div"); // ★M-V12.5: 出勤行+SNS表示補足をまとめる当日限りの入れ物
+  wrap.className = "att-entry";
+  wrap.dataset.tid = String(t.id);
   const tr = document.createElement("div");
   tr.className = "att-row";
-  tr.dataset.tid = String(t.id);
   const nm = document.createElement("div");
   nm.className = "nm-label";
   nm.textContent = t.name;
@@ -1023,12 +1025,17 @@ function attAddRow(t, cur, focusStart) {
   del.className = "x-del";
   del.textContent = "×";
   del.addEventListener("click", () => {
-    tr.remove();
+    wrap.remove();
     attRefreshEmpty();
     renderAttSuggestions(); // 候補に戻す
   });
   tr.append(nm, s, e, ar, del);
-  body.appendChild(tr);
+  const sns = document.createElement("input"); // ★M-V12.5: SNS表示補足(この日の出勤データにのみ紐づく・翌日には残らない)
+  sns.className = "att-sns";
+  sns.placeholder = "SNS表示補足(最短取得コピー用・任意・例: 23:00まで)";
+  if (cur && cur.snsSuffix) sns.value = cur.snsSuffix;
+  wrap.append(tr, sns);
+  body.appendChild(wrap);
   attRefreshEmpty();
   if (focusStart) s.focus();
 }
@@ -1091,14 +1098,16 @@ function openAttendance() {
 document.getElementById("attSave").addEventListener("click", () => {
   const out = [];
   const errs = [];
-  for (const tr of document.querySelectorAll("#attRows .att-row")) {
-    const tid = Number(tr.dataset.tid);
+  for (const wrap of document.querySelectorAll("#attRows .att-entry")) {
+    const tid = Number(wrap.dataset.tid);
+    const tr = wrap.querySelector(".att-row");
     const [, s, e, ar] = tr.children;
+    const snsSuffix = wrap.querySelector(".att-sns").value.trim(); // ★M-V12.5
     const sv = parseBizTime(s.value), ev = parseBizTime(e.value);
     const t = state.therapists.find(x => x.id === tid);
     const nm = t ? t.name : "?";
     if (sv == null || ev == null) { errs.push(`${nm}: 出勤・終了時刻を入力してください(例: 1200 / 2630)`); continue; }
-    out.push({ therapistId: tid, startMin: sv, endMin: ev, area: ar.value });
+    out.push({ therapistId: tid, startMin: sv, endMin: ev, area: ar.value, snsSuffix });
   }
   if (errs.length) { alert(errs.join("\n")); return; }
   state.attendance = out;
@@ -1188,17 +1197,35 @@ function renderShortest() {
   const cands = computeCandidates(base)
     .filter(c => c.maxMinutes === 0 || c.startMin >= base)
     .filter(c => shortestArea === "全" || areaOf.get(c.therapistId) === shortestArea);
+  const snsSuffixOf = new Map(state.attendance.map(a => [a.therapistId, (a.snsSuffix || "").trim()])); // ★M-V12.5: この日の出勤データから(翌日には残らない)
   const tb = document.getElementById("candBody");
   tb.innerHTML = "";
   for (const c of cands) {
     const tr = document.createElement("tr");
     tr.className = c.maxMinutes > 0 ? "ok" : "ng";
-    tr.innerHTML = `<td>${esc(c.name)}</td><td>${c.maxMinutes > 0 ? fmtBiz(c.startMin) : "—"}</td><td>${c.maxMinutes > 0 ? maxText(c.maxMinutes, c.cap) : "本日受付終了"}</td>`;
+    tr.innerHTML = `<td>${esc(c.name)}</td><td>${c.maxMinutes > 0 ? fmtBiz(c.startMin) : "—"}</td><td>${c.maxMinutes > 0 ? maxText(c.maxMinutes, c.cap) : "本日受付終了"}</td><td></td>`;
     if (c.maxMinutes > 0) {
       tr.addEventListener("click", () => {
         closeSheets();
         openReservationForm(null, { therapistId: c.therapistId, startMin: c.startMin, lockTherapist: true });
       });
+      // ★M-V12.5: 最短取得の画面からSNS表示補足を直接編集(出勤登録を開かずに済む・当日のみ有効)
+      const cur = snsSuffixOf.get(c.therapistId) || "";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "cand-sns-btn" + (cur ? " set" : "");
+      btn.textContent = cur || "＋補足";
+      btn.addEventListener("click", ev => {
+        ev.stopPropagation();
+        const v = prompt(`${c.name} さんの補足(SNSコピーの「〜」の直後に付く文言・今日のみ有効)`, cur);
+        if (v === null) return;
+        const idx = state.attendance.findIndex(a => a.therapistId === c.therapistId);
+        if (idx < 0) return; // 出勤データが無い(通常は起こらない)
+        state.attendance[idx] = { ...state.attendance[idx], snsSuffix: v.trim() };
+        saveAttendance(state.dateKey, state.attendance);
+        renderShortest();
+      });
+      tr.children[3].appendChild(btn);
     }
     tb.appendChild(tr);
   }
@@ -1208,7 +1235,8 @@ function renderShortest() {
   if (fm.header && fm.header.trim()) { lines.push(fm.header); lines.push(""); }
   for (const c of cands) {
     if (c.maxMinutes <= 0) continue;
-    lines.push(`${padName(sanName(c.name), 5)} ${fmtNormal(c.startMin)}〜`);
+    const suffix = snsSuffixOf.get(c.therapistId) || ""; // ★M-V12.5: セラピスト別「〜」の後の固定文言(当日のみ)
+    lines.push(`${padName(sanName(c.name), 5)} ${fmtNormal(c.startMin)}〜${suffix}`);
   }
   if (fm.footer && fm.footer.trim()) { lines.push(""); lines.push(fm.footer); }
   document.getElementById("snsText").value = lines.join("\n");
